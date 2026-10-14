@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: smart-api-postgres-deploy
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smartapi}
+      POSTGRES_USER: ${POSTGRES_USER:-anas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_on_deploy}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_deploy_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anas -d smartapi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    container_name: smart-api-redis-deploy
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  user-service:
+    build: ./user-service
+    container_name: smart-api-user-service-deploy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/smartapi?options=-c%20TimeZone=UTC
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-anas}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-change_me_on_deploy}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      JAVA_TOOL_OPTIONS: -Duser.timezone=UTC
+    ports:
+      - "8082:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  gateway:
+    build: ./api-gateaway
+    container_name: smart-api-gateway-deploy
+    environment:
+      GATEWAY_API_KEY: ${GATEWAY_API_KEY:-change_me_on_deploy}
+      JAVA_TOOL_OPTIONS: -Duser.timezone=UTC
+      GATEWAY_USER_SERVICE_URL: http://user-service:8081
+    ports:
+        - "8083:8080"
+    depends_on:
+      - user-service
+
+volumes:
+  postgres_deploy_data:
+
